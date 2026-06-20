@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .key import CacheKey
@@ -75,7 +75,7 @@ class KernelRepository:
                 json.dumps(kernel.params),
                 kernel.kernel_code,
                 json.dumps(kernel.benchmark_json),
-                datetime.now(timezone.utc).isoformat(),
+                datetime.now(UTC).isoformat(),
             ),
         )
         self.conn.commit()
