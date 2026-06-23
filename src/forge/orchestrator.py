@@ -10,6 +10,7 @@ from forge.cache.repository import CachedKernel, KernelRepository
 from forge.codegen.triton_codegen import generate
 from forge.ir.kernel_spec import KernelSpec
 from forge.runtime.worker import WorkerResult, run_in_worker
+from forge.search.candidate import CandidateGenerator
 from forge.search.grid import GridSearch
 from forge.search.params import SearchParams
 from forge.validation.test_cases import correctness_cases, primary_input
@@ -71,7 +72,7 @@ class Orchestrator:
         self,
         spec: KernelSpec,
         budget: int = 50,
-        search: GridSearch | None = None,
+        search: CandidateGenerator | None = None,
         use_cache: bool = True,
     ) -> SearchResult:
         spec.validate()

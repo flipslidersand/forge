@@ -20,6 +20,10 @@ dev = [
     "ruff>=0.4",
     "pyright>=1.1",
 ]
+llm = [
+    "anthropic>=0.69",
+    "pydantic>=2",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/forge"]

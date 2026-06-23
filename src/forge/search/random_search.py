@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from forge.ir.kernel_spec import KernelSpec
 
+from .candidate import HistoryEntry
 from .params import SearchParams
 from .space import SearchSpace
 
@@ -25,6 +26,7 @@ class RandomSearch:
         spec: KernelSpec,
         compute_capability: str,
         budget: int | None = None,
+        history: list[HistoryEntry] | None = None,
     ) -> list[SearchParams]:
         candidates = list(self.space.enumerate(spec, compute_capability))
         shuffled = _lcg_shuffle(candidates, self.seed)
