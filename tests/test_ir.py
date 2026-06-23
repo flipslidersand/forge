@@ -1,3 +1,5 @@
+from dataclasses import FrozenInstanceError
+
 import pytest
 import torch
 
@@ -39,7 +41,7 @@ class TestTensorSpec:
 
     def test_frozen(self) -> None:
         spec = TensorSpec(shape=(1,), dtype=torch.float32, is_contiguous=True)
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             spec.shape = (2,)  # type: ignore[misc]
 
 
@@ -74,7 +76,7 @@ class TestKernelSpec:
 
     def test_frozen(self) -> None:
         spec = make_rmsnorm_spec()
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             spec.op_type = "softmax"  # type: ignore[misc]
 
 

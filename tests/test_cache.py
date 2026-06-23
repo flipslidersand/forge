@@ -1,4 +1,5 @@
 import tempfile
+from datetime import UTC
 from pathlib import Path
 
 import torch
@@ -82,14 +83,14 @@ class TestKernelRepository:
         )
 
     def _make_kernel(self, key: CacheKey) -> CachedKernel:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         return CachedKernel(
             cache_key=key,
             params={"block_size": 1024, "num_warps": 8},
             kernel_code="def rmsnorm(): pass",
             benchmark_json={"median_us": 42.0, "p20_us": 40.0, "p80_us": 44.0},
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
     def test_get_miss(self) -> None:
