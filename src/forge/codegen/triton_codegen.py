@@ -22,9 +22,11 @@ def _env() -> Environment:
     )
 
 
-# op_type -> テンプレートファイル名。Phase 4 でバリアント別に分岐する。
+# (op_type, variant) -> テンプレートファイル名。
 _TEMPLATES = {
-    "rmsnorm": "rmsnorm.py.jinja",
+    ("rmsnorm", "single_row"): "rmsnorm.py.jinja",
+    ("rmsnorm", "multi_row"): "rmsnorm_multi_row.py.jinja",
+    ("rmsnorm", "two_pass"): "rmsnorm_two_pass.py.jinja",
 }
 
 
@@ -35,17 +37,19 @@ def generate(spec: KernelSpec, params: SearchParams) -> str:
     一時 .py ファイルとして実行する（@triton.jit はソースをファイルから読むため
     インライン exec では動かない — Issue #3 参照）。
     """
-    if spec.op_type not in _TEMPLATES:
-        raise ValueError(f"No codegen template for op_type={spec.op_type!r}")
+    tkey = (spec.op_type, params.variant)
+    if tkey not in _TEMPLATES:
+        raise ValueError(f"No codegen template for {tkey}")
 
     out_dtype_str = spec.output_specs[0].dtype_str()
-    template = _env().get_template(_TEMPLATES[spec.op_type])
+    template = _env().get_template(_TEMPLATES[tkey])
     return template.render(
         variant=params.variant,
         block_size=params.block_size,
         num_warps=params.num_warps,
         num_stages=params.num_stages,
         acc_dtype=params.acc_dtype,
+        rows_per_program=params.rows_per_program,
         acc_tl=acc_dtype_to_tl(params.acc_dtype),
         out_tl=torch_dtype_str_to_tl(out_dtype_str),
     )

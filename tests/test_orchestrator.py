@@ -78,6 +78,28 @@ def test_second_run_is_cache_hit() -> None:
 
 
 @_SKIP
+def test_search_across_variants_all_correct() -> None:
+    # single_row / multi_row / two_pass を横断し、全 fp32 候補が正確であること
+    with tempfile.TemporaryDirectory() as d:
+        repo = KernelRepository(Path(d) / "cache.db")
+        space = SearchSpace(
+            num_warps=[8],
+            num_stages=[1],
+            acc_dtypes=["fp32"],
+            variants=["single_row", "multi_row", "two_pass"],
+            rows_per_program=[2],
+        )
+        orch = Orchestrator(repo=repo, warmup=5, repeat=20)
+        result = orch.optimize(_spec(), budget=20, search=GridSearch(space))
+
+        tried_variants = {e.params.variant for e in result.experiments}
+        assert tried_variants == {"single_row", "multi_row", "two_pass"}
+        assert all(e.correct for e in result.experiments)
+        assert result.best_params is not None
+        repo.close()
+
+
+@_SKIP
 def test_fp16_accumulator_rejected_as_incorrect() -> None:
     # fp16 accumulator は縮約精度不足で tolerance 超過 → 不採用になるはず
     with tempfile.TemporaryDirectory() as d:

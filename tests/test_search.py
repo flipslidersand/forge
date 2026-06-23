@@ -3,6 +3,7 @@ import torch
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
 from forge.search.grid import GridSearch
+from forge.search.random_search import RandomSearch
 from forge.search.space import SearchSpace, _cc_to_int, _next_pow2
 
 
@@ -20,6 +21,10 @@ def spec(n: int = 4096) -> KernelSpec:
     )
 
 
+def single(variant: str, **kw) -> SearchSpace:
+    return SearchSpace(variants=[variant], **kw)
+
+
 class TestHelpers:
     def test_cc_to_int(self) -> None:
         assert _cc_to_int("8.9") == 89
@@ -32,18 +37,33 @@ class TestHelpers:
         assert _next_pow2(5000) == 8192
 
 
-class TestSearchSpace:
-    def test_block_size_at_least_hidden(self) -> None:
-        params = list(SearchSpace().enumerate(spec(4096), "8.9"))
-        assert all(p.block_size >= 4096 for p in params)
+class TestSearchSpaceBlocks:
+    def test_single_row_block_at_least_hidden(self) -> None:
+        params = list(single("single_row").enumerate(spec(4096), "8.9"))
+        assert params and all(p.block_size >= 4096 for p in params)
+
+    def test_two_pass_allows_smaller_tiles(self) -> None:
+        params = list(single("two_pass").enumerate(spec(4096), "8.9"))
+        # two_pass のタイルは N 以下
+        assert params and all(p.block_size <= 4096 for p in params)
+        assert any(p.block_size < 4096 for p in params)
+
+    def test_multi_row_has_rows_gt_1(self) -> None:
+        params = list(single("multi_row").enumerate(spec(4096), "8.9"))
+        assert params and {p.rows_per_program for p in params} == {2, 4}
+
+    def test_non_multi_row_keeps_rows_1(self) -> None:
+        for v in ("single_row", "two_pass"):
+            params = list(single(v).enumerate(spec(4096), "8.9"))
+            assert all(p.rows_per_program == 1 for p in params)
 
     def test_no_valid_block_falls_back_to_next_pow2(self) -> None:
-        # hidden=6000 → block_sizes [1024..8192] のうち >=6000 は 8192 のみ
-        params = list(SearchSpace().enumerate(spec(6000), "8.9"))
+        params = list(single("single_row").enumerate(spec(6000), "8.9"))
         assert all(p.block_size == 8192 for p in params)
 
+
+class TestSearchSpaceGpu:
     def test_pascal_restricts_num_stages(self) -> None:
-        # cc 6.1 では num_stages=1 のみ
         params = list(SearchSpace().enumerate(spec(4096), "6.1"))
         assert {p.num_stages for p in params} == {1}
 
@@ -53,8 +73,15 @@ class TestSearchSpace:
 
     def test_no_duplicates(self) -> None:
         params = list(SearchSpace().enumerate(spec(4096), "8.9"))
-        keys = [(p.variant, p.block_size, p.num_warps, p.num_stages, p.acc_dtype) for p in params]
+        keys = [
+            (p.variant, p.block_size, p.rows_per_program, p.num_warps, p.num_stages, p.acc_dtype)
+            for p in params
+        ]
         assert len(keys) == len(set(keys))
+
+    def test_all_three_variants_present(self) -> None:
+        params = list(SearchSpace().enumerate(spec(4096), "6.1"))
+        assert {p.variant for p in params} == {"single_row", "multi_row", "two_pass"}
 
 
 class TestGridSearch:
@@ -62,12 +89,33 @@ class TestGridSearch:
         cands = GridSearch().generate(spec(4096), "8.9", budget=5)
         assert len(cands) == 5
 
-    def test_no_budget_returns_all(self) -> None:
-        all_c = GridSearch().generate(spec(4096), "8.9")
-        # cc 8.9: blocks{4096,8192} x warps{4,8,16} x stages{1,2,3} x acc{fp32,fp16} = 36
-        assert len(all_c) == 36
-
-    def test_pascal_fewer_candidates(self) -> None:
-        cands = GridSearch().generate(spec(4096), "6.1")
-        # blocks{4096,8192} x warps{4,8,16} x stages{1} x acc{fp32,fp16} = 12
+    def test_single_row_pascal_count(self) -> None:
+        # single_row, cc6.1: blocks{4096,8192} x warps{4,8,16} x stages{1} x acc{fp32,fp16} = 12
+        cands = GridSearch(single("single_row")).generate(spec(4096), "6.1")
         assert len(cands) == 12
+
+    def test_variants_expand_space(self) -> None:
+        single_only = GridSearch(single("single_row")).generate(spec(4096), "6.1")
+        all_variants = GridSearch().generate(spec(4096), "6.1")
+        assert len(all_variants) > len(single_only)
+
+
+class TestRandomSearch:
+    def test_deterministic_with_seed(self) -> None:
+        a = RandomSearch(seed=42).generate(spec(4096), "8.9", budget=10)
+        b = RandomSearch(seed=42).generate(spec(4096), "8.9", budget=10)
+        assert a == b
+
+    def test_different_seed_differs(self) -> None:
+        a = RandomSearch(seed=1).generate(spec(4096), "8.9", budget=10)
+        b = RandomSearch(seed=2).generate(spec(4096), "8.9", budget=10)
+        assert a != b
+
+    def test_budget_caps(self) -> None:
+        cands = RandomSearch().generate(spec(4096), "8.9", budget=7)
+        assert len(cands) == 7
+
+    def test_samples_are_valid_subset(self) -> None:
+        full = set(SearchSpace().enumerate(spec(4096), "8.9"))
+        sample = RandomSearch(seed=3).generate(spec(4096), "8.9", budget=15)
+        assert set(sample) <= full

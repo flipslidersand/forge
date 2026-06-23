@@ -57,6 +57,36 @@ class TestCodegen:
         code = generate_rmsnorm(make_spec(out_dtype=torch.bfloat16), default_params())
         assert "out.to(tl.bfloat16)" in code
 
+
+class TestVariantCodegen:
+    def test_multi_row_valid_python_and_grid(self) -> None:
+        p = default_params(variant="multi_row", rows_per_program=4)
+        code = generate_rmsnorm(make_spec(), p)
+        compile(code, "<gen>", "exec")
+        assert "ROWS=4" in code
+        assert "triton.cdiv(M, 4)" in code
+        assert "tl.static_range" in code
+
+    def test_two_pass_valid_python_and_loops(self) -> None:
+        p = default_params(variant="two_pass", block_size=1024)
+        code = generate_rmsnorm(make_spec(), p)
+        compile(code, "<gen>", "exec")
+        assert "BLOCK_SIZE=1024" in code
+        assert "for start in range(0, N, BLOCK_SIZE)" in code
+
+    def test_two_pass_forces_fp32_reduction(self) -> None:
+        # pass1 の縮約は acc_dtype に関わらず fp32 で安定化される
+        code = generate_rmsnorm(make_spec(), default_params(variant="two_pass", acc_dtype="fp16"))
+        assert "tl.zeros([BLOCK_SIZE], dtype=tl.float32)" in code
+
+    def test_each_variant_uses_distinct_template(self) -> None:
+        s = generate_rmsnorm(make_spec(), default_params(variant="single_row"))
+        m = generate_rmsnorm(make_spec(), default_params(variant="multi_row", rows_per_program=2))
+        t = generate_rmsnorm(make_spec(), default_params(variant="two_pass", block_size=1024))
+        assert "variant=multi_row" in m
+        assert "variant=two_pass" in t
+        assert "ROWS" not in s and "ROWS" not in t
+
     def test_deterministic(self) -> None:
         a = generate_rmsnorm(make_spec(), default_params())
         b = generate_rmsnorm(make_spec(), default_params())
