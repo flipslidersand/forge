@@ -12,12 +12,8 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import sys
-import tempfile
-import uuid
-from pathlib import Path
 from typing import Any
 
 
@@ -37,24 +33,13 @@ def _build_tensor(spec: dict[str, Any], torch: Any):
     raise ValueError(f"unknown init: {init}")
 
 
-def _load_kernel_fn(code: str):
-    tmp_dir = Path(tempfile.gettempdir()) / "forge_workers"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    mod_path = tmp_dir / f"kernel_{uuid.uuid4().hex}.py"
-    mod_path.write_text(code)
-    spec = importlib.util.spec_from_file_location(mod_path.stem, str(mod_path))
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.kernel_fn
-
-
 def main() -> None:
     payload = json.loads(sys.stdin.read())
     try:
         import torch
 
         from forge.benchmark.timer import measure
+        from forge.runtime.loader import load_kernel_fn
         from forge.runtime.reference import baseline_name, get_baseline, get_reference
 
         op_type = payload["op_type"]
@@ -62,7 +47,7 @@ def main() -> None:
         task = payload.get("task", "full")
         tol = payload.get("tolerance", {"atol": 2e-3, "rtol": 1e-2, "equal_nan": False})
 
-        kernel_fn = _load_kernel_fn(payload["kernel_code"])
+        kernel_fn = load_kernel_fn(payload["kernel_code"])
         reference = get_reference(op_type)
 
         # --- 正確性検証（複数ケース） ---
