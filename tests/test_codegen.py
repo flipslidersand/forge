@@ -1,9 +1,42 @@
 import torch
 
-from forge.codegen.triton_codegen import generate_rmsnorm
+from forge.codegen.triton_codegen import generate, generate_rmsnorm
 from forge.ir.kernel_spec import KernelSpec
 from forge.ir.tensor_spec import TensorSpec
 from forge.search.params import SearchParams
+
+
+def softmax_spec(n: int = 4096) -> KernelSpec:
+    return KernelSpec(
+        op_type="softmax",
+        input_specs=(TensorSpec(shape=(2048, n), dtype=torch.float16, is_contiguous=True),),
+        output_specs=(TensorSpec(shape=(2048, n), dtype=torch.float16, is_contiguous=True),),
+        constants={"dim": -1},
+        graph_hash="softmax_v1",
+        constraints=(),
+    )
+
+
+class TestSoftmaxCodegen:
+    def test_single_row_valid_python(self) -> None:
+        code = generate(softmax_spec(), default_params())
+        compile(code, "<gen>", "exec")
+        assert "op=softmax variant=single_row" in code
+        assert "tl.exp" in code and "tl.max" in code  # safe softmax
+        assert "def kernel_fn(x, dim=-1)" in code
+
+    def test_multi_row_valid_python(self) -> None:
+        p = default_params(variant="multi_row", rows_per_program=4)
+        code = generate(softmax_spec(), p)
+        compile(code, "<gen>", "exec")
+        assert "ROWS=4" in code
+        assert "triton.cdiv(M, 4)" in code
+
+    def test_two_pass_has_no_template(self) -> None:
+        import pytest
+
+        with pytest.raises(ValueError, match="No codegen template"):
+            generate(softmax_spec(), default_params(variant="two_pass", block_size=1024))
 
 
 def make_spec(out_dtype: torch.dtype = torch.float16) -> KernelSpec:

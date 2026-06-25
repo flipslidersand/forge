@@ -27,6 +27,9 @@ _TEMPLATES = {
     ("rmsnorm", "single_row"): "rmsnorm.py.jinja",
     ("rmsnorm", "multi_row"): "rmsnorm_multi_row.py.jinja",
     ("rmsnorm", "two_pass"): "rmsnorm_two_pass.py.jinja",
+    ("softmax", "single_row"): "softmax.py.jinja",
+    ("softmax", "multi_row"): "softmax_multi_row.py.jinja",
+    # softmax two_pass はオンライン softmax が必要なため未対応（orchestrator がスキップ）
 }
 
 

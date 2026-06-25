@@ -18,7 +18,8 @@ class Tolerance:
 # 1e-3 では正しい fp32-accumulate 実装を誤って落とすため厳しすぎる。
 TOLERANCE: dict[str, Tolerance] = {
     "rmsnorm": Tolerance(atol=2e-3, rtol=1e-2, equal_nan=False),
-    "softmax": Tolerance(atol=1e-4, rtol=1e-3, equal_nan=False),
+    # softmax 出力は [0,1]、fp16 分解能 ~1e-3。fp32 縮約実装を通すため 2e-3。
+    "softmax": Tolerance(atol=2e-3, rtol=1e-2, equal_nan=False),
 }
 
 

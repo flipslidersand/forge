@@ -14,9 +14,23 @@ class TestIdentify:
     def test_recognizes_rmsnorm(self) -> None:
         assert identify(rmsnorm) == "rmsnorm"
 
-    def test_unknown_op_returns_none(self) -> None:
+    def test_recognizes_softmax(self) -> None:
+        # dim は定数（torch.softmax は trace 時に concrete int を要求する）
         def softmax(x):
             return torch.softmax(x, dim=-1)
+
+        assert identify(softmax) == "softmax"
+
+    def test_unrelated_op_returns_none(self) -> None:
+        def relu(x):
+            return torch.relu(x)
+
+        assert identify(relu) is None
+
+    def test_dynamic_dim_untraceable_returns_none(self) -> None:
+        # dim を引数で渡す形は trace 不能 → None（eager フォールバック）
+        def softmax(x, dim):
+            return torch.softmax(x, dim=dim)
 
         assert identify(softmax) is None
 
@@ -50,7 +64,7 @@ class TestRegistry:
     def test_match_counts_miss(self) -> None:
         from collections import Counter
 
-        assert match_counts(Counter({"softmax": 1})) is None
+        assert match_counts(Counter({"relu": 1})) is None
 
     def test_pattern_matches_exact_multiset(self) -> None:
         from collections import Counter

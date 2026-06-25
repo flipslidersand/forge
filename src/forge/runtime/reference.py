@@ -15,8 +15,13 @@ def rmsnorm_reference(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torc
     return (x32 * rms * weight.float()).to(x.dtype)
 
 
+def softmax_reference(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
+    return torch.softmax(x.float(), dim=dim).to(x.dtype)
+
+
 REFERENCE_IMPLS: dict[str, Callable[..., torch.Tensor]] = {
     "rmsnorm": rmsnorm_reference,
+    "softmax": softmax_reference,
 }
 
 
@@ -38,8 +43,13 @@ def _rmsnorm_baseline(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torc
     return rmsnorm_reference(x, weight, eps)
 
 
+def _softmax_baseline(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
+    return torch.softmax(x, dim=dim)
+
+
 BASELINE_IMPLS: dict[str, Callable[..., torch.Tensor]] = {
     "rmsnorm": _rmsnorm_baseline,
+    "softmax": _softmax_baseline,
 }
 
 
@@ -53,4 +63,6 @@ def get_baseline(op_type: str) -> Callable[..., torch.Tensor]:
 def baseline_name(op_type: str) -> str:
     if op_type == "rmsnorm" and hasattr(torch.nn.functional, "rms_norm"):
         return "F.rms_norm"
+    if op_type == "softmax":
+        return "F.softmax"
     return "fp32_reference"

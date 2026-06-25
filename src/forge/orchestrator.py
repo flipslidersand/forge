@@ -106,7 +106,14 @@ class Orchestrator:
         baseline_name: str | None = None
 
         for i, params in enumerate(candidates, 1):
-            code = generate(spec, params)
+            label = f"[{i}/{len(candidates)}] {params.block_size}/{params.num_warps}"
+            try:
+                code = generate(spec, params)
+            except ValueError as e:
+                # codegen テンプレートが無い variant 等は候補ごとスキップ
+                experiments.append(ExperimentResult(params, False, False, None, str(e)))
+                self._progress(f"{label} SKIP: {e}")
+                continue
             wr: WorkerResult = run_in_worker(
                 code,
                 spec.op_type,
@@ -121,7 +128,6 @@ class Orchestrator:
                 python_executable=self.python_executable,
             )
 
-            label = f"[{i}/{len(candidates)}] {params.block_size}/{params.num_warps}"
             if not wr.success:
                 experiments.append(ExperimentResult(params, False, False, None, wr.error))
                 self._progress(f"{label} FAIL: {wr.error}")

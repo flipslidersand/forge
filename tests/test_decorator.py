@@ -91,3 +91,25 @@ def test_unrecognized_op_falls_back_to_eager() -> None:
     out = not_rmsnorm(x, y)
     assert torch.allclose(out, x + y)
     assert not_rmsnorm._forge_compiled == {}  # type: ignore[attr-defined]
+
+
+@_SKIP
+def test_decorated_softmax_matches_eager() -> None:
+    # アーキの汎用性: 同じデコレータで softmax も最適化される
+    space = SearchSpace(
+        num_warps=[4, 8], num_stages=[1], acc_dtypes=["fp32"], variants=["single_row"]
+    )
+    with tempfile.TemporaryDirectory() as d:
+        repo = KernelRepository(Path(d) / "cache.db")
+
+        @forge.optimize(budget=4, repo=repo, search=GridSearch(space))
+        def softmax(x):
+            return torch.softmax(x, dim=-1)
+
+        x = torch.randn(256, 4096, dtype=torch.float16, device="cuda")
+        out = softmax(x)
+        ref = torch.softmax(x.float(), dim=-1).to(x.dtype)
+        assert torch.allclose(out.float(), ref.float(), atol=2e-3, rtol=1e-2)
+        # softmax は単一行の確率分布 → 各行の和が ~1
+        assert torch.allclose(out.float().sum(-1), torch.ones(256, device="cuda"), atol=1e-2)
+        repo.close()
