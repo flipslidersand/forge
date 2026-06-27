@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 # サポートする実装バリアント（コード構造）。
-#   single_row : 1 program = 1 行、BLOCK_SIZE >= N
-#   multi_row  : 1 program = ROWS 行、BLOCK_SIZE >= N（小さい N で occupancy 改善）
-#   two_pass   : BLOCK_SIZE をタイルとして N をループ。BLOCK_SIZE < N を許容（大きい N 向け）
-SUPPORTED_VARIANTS = ("single_row", "multi_row", "two_pass")
+#   single_row  : 1 program = 1 行、BLOCK_SIZE >= N（reduction op）
+#   multi_row   : 1 program = ROWS 行、BLOCK_SIZE >= N（小さい N で occupancy 改善）
+#   two_pass    : BLOCK_SIZE をタイルとして N をループ。BLOCK_SIZE < N を許容（大きい N 向け）
+#   elementwise : flat に numel をタイル分割。BLOCK_SIZE は N に縛られない（elementwise op）
+SUPPORTED_VARIANTS = ("single_row", "multi_row", "two_pass", "elementwise")
 SUPPORTED_ACC_DTYPES = ("fp32", "fp16")
 
 

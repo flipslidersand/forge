@@ -25,6 +25,29 @@ def single(variant: str, **kw) -> SearchSpace:
     return SearchSpace(variants=[variant], **kw)
 
 
+def gelu_spec(n: int = 4096) -> KernelSpec:
+    return KernelSpec(
+        op_type="gelu",
+        input_specs=(TensorSpec((2048, n), torch.float16, True),),
+        output_specs=(TensorSpec((2048, n), torch.float16, True),),
+        constants={},
+        graph_hash="gelu_v1",
+        constraints=(),
+    )
+
+
+class TestElementwiseSpace:
+    def test_gelu_uses_elementwise_variant_only(self) -> None:
+        params = list(SearchSpace().enumerate(gelu_spec(4096), "8.9"))
+        assert params and {p.variant for p in params} == {"elementwise"}
+
+    def test_gelu_block_not_tied_to_hidden(self) -> None:
+        # elementwise は N=4096 でも小さい block(256 等)を許す
+        params = list(SearchSpace().enumerate(gelu_spec(4096), "8.9"))
+        assert any(p.block_size < 4096 for p in params)
+        assert all(p.rows_per_program == 1 for p in params)
+
+
 class TestHelpers:
     def test_cc_to_int(self) -> None:
         assert _cc_to_int("8.9") == 89

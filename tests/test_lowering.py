@@ -21,6 +21,22 @@ class TestIdentify:
 
         assert identify(softmax) == "softmax"
 
+    def test_recognizes_layernorm(self) -> None:
+        import torch.nn.functional as F
+
+        def layernorm(x, weight, bias):
+            return F.layer_norm(x, (4096,), weight, bias, 1e-5)
+
+        assert identify(layernorm) == "layernorm"
+
+    def test_recognizes_gelu(self) -> None:
+        import torch.nn.functional as F
+
+        def gelu(x):
+            return F.gelu(x)
+
+        assert identify(gelu) == "gelu"
+
     def test_unrelated_op_returns_none(self) -> None:
         def relu(x):
             return torch.relu(x)

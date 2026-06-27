@@ -94,6 +94,52 @@ def test_unrecognized_op_falls_back_to_eager() -> None:
 
 
 @_SKIP
+def test_decorated_layernorm_matches_eager() -> None:
+    # 3 入力(x, weight, bias)の reduction op
+    import torch.nn.functional as F
+
+    space = SearchSpace(
+        num_warps=[4, 8], num_stages=[1], acc_dtypes=["fp32"], variants=["single_row"]
+    )
+    with tempfile.TemporaryDirectory() as d:
+        repo = KernelRepository(Path(d) / "cache.db")
+
+        @forge.optimize(budget=4, repo=repo, search=GridSearch(space))
+        def layernorm(x, weight, bias, eps=1e-5):
+            return F.layer_norm(x, (x.shape[-1],), weight, bias, eps)
+
+        x = torch.randn(256, 4096, dtype=torch.float16, device="cuda")
+        w = torch.randn(4096, dtype=torch.float16, device="cuda")
+        b = torch.randn(4096, dtype=torch.float16, device="cuda")
+        out = layernorm(x, w, b)
+        ref = F.layer_norm(x.float(), (4096,), w.float(), b.float(), 1e-5).to(x.dtype)
+        assert torch.allclose(out.float(), ref.float(), atol=2e-3, rtol=1e-2)
+        repo.close()
+
+
+@_SKIP
+def test_decorated_gelu_matches_eager() -> None:
+    # elementwise op（block が N に縛られない）
+    import torch.nn.functional as F
+
+    with tempfile.TemporaryDirectory() as d:
+        repo = KernelRepository(Path(d) / "cache.db")
+
+        @forge.optimize(budget=6, repo=repo)
+        def gelu(x):
+            return F.gelu(x)
+
+        x = torch.randn(512, 2048, dtype=torch.float16, device="cuda")
+        out = gelu(x)
+        ref = F.gelu(x.float()).to(x.dtype)
+        assert torch.allclose(out.float(), ref.float(), atol=2e-3, rtol=1e-2)
+        # elementwise variant が選ばれていること
+        kfns = gelu._forge_compiled  # type: ignore[attr-defined]
+        assert len(kfns) == 1 and next(iter(kfns.values())) is not None
+        repo.close()
+
+
+@_SKIP
 def test_decorated_softmax_matches_eager() -> None:
     # アーキの汎用性: 同じデコレータで softmax も最適化される
     space = SearchSpace(

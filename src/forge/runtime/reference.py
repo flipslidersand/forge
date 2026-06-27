@@ -19,9 +19,23 @@ def softmax_reference(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
     return torch.softmax(x.float(), dim=dim).to(x.dtype)
 
 
+def layernorm_reference(
+    x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float = 1e-5
+) -> torch.Tensor:
+    n = x.shape[-1]
+    out = torch.nn.functional.layer_norm(x.float(), (n,), weight.float(), bias.float(), eps)
+    return out.to(x.dtype)
+
+
+def gelu_reference(x: torch.Tensor) -> torch.Tensor:
+    return torch.nn.functional.gelu(x.float()).to(x.dtype)
+
+
 REFERENCE_IMPLS: dict[str, Callable[..., torch.Tensor]] = {
     "rmsnorm": rmsnorm_reference,
     "softmax": softmax_reference,
+    "layernorm": layernorm_reference,
+    "gelu": gelu_reference,
 }
 
 
@@ -47,9 +61,21 @@ def _softmax_baseline(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
     return torch.softmax(x, dim=dim)
 
 
+def _layernorm_baseline(
+    x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float = 1e-5
+) -> torch.Tensor:
+    return torch.nn.functional.layer_norm(x, (x.shape[-1],), weight, bias, eps)
+
+
+def _gelu_baseline(x: torch.Tensor) -> torch.Tensor:
+    return torch.nn.functional.gelu(x)
+
+
 BASELINE_IMPLS: dict[str, Callable[..., torch.Tensor]] = {
     "rmsnorm": _rmsnorm_baseline,
     "softmax": _softmax_baseline,
+    "layernorm": _layernorm_baseline,
+    "gelu": _gelu_baseline,
 }
 
 
@@ -60,9 +86,10 @@ def get_baseline(op_type: str) -> Callable[..., torch.Tensor]:
     return BASELINE_IMPLS[op_type]
 
 
+_BASELINE_NAMES = {"softmax": "F.softmax", "layernorm": "F.layer_norm", "gelu": "F.gelu"}
+
+
 def baseline_name(op_type: str) -> str:
     if op_type == "rmsnorm" and hasattr(torch.nn.functional, "rms_norm"):
         return "F.rms_norm"
-    if op_type == "softmax":
-        return "F.softmax"
-    return "fp32_reference"
+    return _BASELINE_NAMES.get(op_type, "fp32_reference")

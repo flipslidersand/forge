@@ -15,8 +15,11 @@ class KernelSpec:
     constraints: tuple[str, ...]
 
     def validate(self) -> None:
-        allowed = {"rmsnorm", "softmax"}
-        if self.op_type not in allowed:
-            raise ValueError(f"Unsupported op_type: {self.op_type!r}. Must be one of {allowed}")
+        from forge.ops import OP_INFO
+
+        if self.op_type not in OP_INFO:
+            raise ValueError(
+                f"Unsupported op_type: {self.op_type!r}. Must be one of {set(OP_INFO)}"
+            )
         if not self.input_specs:
             raise ValueError("input_specs must not be empty")

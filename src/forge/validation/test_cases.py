@@ -28,8 +28,26 @@ def _softmax_inputs(
     x_scale: float = 1.0,
     seed: int = 0,
 ) -> list[dict[str, Any]]:
-    # softmax は入力 x のみ（weight なし）
+    # softmax / gelu は入力 x のみ
     return [{"shape": [m, n], "dtype": dtype, "init": x_init, "scale": x_scale, "seed": seed}]
+
+
+def _layernorm_inputs(
+    m: int,
+    n: int,
+    dtype: str,
+    x_init: str = "randn",
+    x_scale: float = 1.0,
+    w_init: str = "ones",
+    b_init: str = "zeros",
+    seed: int = 0,
+) -> list[dict[str, Any]]:
+    # layernorm は x, weight, bias の 3 入力
+    return [
+        {"shape": [m, n], "dtype": dtype, "init": x_init, "scale": x_scale, "seed": seed},
+        {"shape": [n], "dtype": dtype, "init": w_init, "scale": 1.0, "seed": seed + 1},
+        {"shape": [n], "dtype": dtype, "init": b_init, "scale": 1.0, "seed": seed + 2},
+    ]
 
 
 def primary_input(spec: KernelSpec) -> list[dict[str, Any]]:
@@ -39,8 +57,10 @@ def primary_input(spec: KernelSpec) -> list[dict[str, Any]]:
     dt = x.dtype_str()
     if spec.op_type == "rmsnorm":
         return _rmsnorm_inputs(m, n, dt)
-    if spec.op_type == "softmax":
+    if spec.op_type in ("softmax", "gelu"):
         return _softmax_inputs(m, n, dt)
+    if spec.op_type == "layernorm":
+        return _layernorm_inputs(m, n, dt)
     raise ValueError(f"primary_input: unsupported op_type {spec.op_type!r}")
 
 
@@ -86,6 +106,36 @@ def correctness_cases(spec: KernelSpec) -> list[dict[str, Any]]:
             {
                 "name": "small_values",
                 "input_specs": _softmax_inputs(64, n, dt, x_scale=1e-3, seed=9),
+            },
+            {"name": "zeros", "input_specs": _softmax_inputs(8, n, dt, x_init="zeros")},
+        ]
+    if spec.op_type == "layernorm":
+        return [
+            {"name": "basic", "input_specs": _layernorm_inputs(2048, n, dt)},
+            {"name": "single_row", "input_specs": _layernorm_inputs(1, n, dt)},
+            {"name": "odd_rows", "input_specs": _layernorm_inputs(7, n, dt, seed=3)},
+            {
+                "name": "wb_randn",
+                "input_specs": _layernorm_inputs(64, n, dt, w_init="randn", b_init="randn", seed=5),
+            },
+            {
+                "name": "large_values",
+                "input_specs": _layernorm_inputs(64, n, dt, x_scale=100.0, seed=7),
+            },
+            {"name": "zeros", "input_specs": _layernorm_inputs(8, n, dt, x_init="zeros")},
+        ]
+    if spec.op_type == "gelu":
+        return [
+            {"name": "basic", "input_specs": _softmax_inputs(2048, n, dt)},
+            {"name": "single_row", "input_specs": _softmax_inputs(1, n, dt)},
+            {"name": "odd_rows", "input_specs": _softmax_inputs(7, n, dt, seed=3)},
+            {
+                "name": "large_values",
+                "input_specs": _softmax_inputs(64, n, dt, x_scale=10.0, seed=7),
+            },
+            {
+                "name": "negative",
+                "input_specs": _softmax_inputs(64, n, dt, x_scale=-5.0, seed=9),
             },
             {"name": "zeros", "input_specs": _softmax_inputs(8, n, dt, x_init="zeros")},
         ]

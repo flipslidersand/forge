@@ -39,6 +39,55 @@ class TestSoftmaxCodegen:
             generate(softmax_spec(), default_params(variant="two_pass", block_size=1024))
 
 
+def layernorm_spec(n: int = 4096) -> KernelSpec:
+    return KernelSpec(
+        op_type="layernorm",
+        input_specs=(
+            TensorSpec(shape=(2048, n), dtype=torch.float16, is_contiguous=True),
+            TensorSpec(shape=(n,), dtype=torch.float16, is_contiguous=True),
+            TensorSpec(shape=(n,), dtype=torch.float16, is_contiguous=True),
+        ),
+        output_specs=(TensorSpec(shape=(2048, n), dtype=torch.float16, is_contiguous=True),),
+        constants={"eps": 1e-5},
+        graph_hash="layernorm_v1",
+        constraints=(),
+    )
+
+
+def gelu_spec(n: int = 4096) -> KernelSpec:
+    return KernelSpec(
+        op_type="gelu",
+        input_specs=(TensorSpec(shape=(2048, n), dtype=torch.float16, is_contiguous=True),),
+        output_specs=(TensorSpec(shape=(2048, n), dtype=torch.float16, is_contiguous=True),),
+        constants={},
+        graph_hash="gelu_v1",
+        constraints=(),
+    )
+
+
+class TestLayerNormGeluCodegen:
+    def test_layernorm_single_row_valid(self) -> None:
+        code = generate(layernorm_spec(), default_params())
+        compile(code, "<gen>", "exec")
+        assert "op=layernorm" in code
+        assert "tl.where" in code  # マスク付き分散
+        assert "def kernel_fn(x, weight, bias, eps=1e-5)" in code
+
+    def test_layernorm_multi_row_valid(self) -> None:
+        code = generate(layernorm_spec(), default_params(variant="multi_row", rows_per_program=2))
+        compile(code, "<gen>", "exec")
+        assert "ROWS=2" in code
+
+    def test_gelu_elementwise_valid(self) -> None:
+        p = default_params(variant="elementwise", block_size=1024)
+        code = generate(gelu_spec(), p)
+        compile(code, "<gen>", "exec")
+        assert "op=gelu variant=elementwise" in code
+        assert "tl.erf" in code
+        assert "x.numel()" in code
+        assert "def kernel_fn(x)" in code
+
+
 def make_spec(out_dtype: torch.dtype = torch.float16) -> KernelSpec:
     return KernelSpec(
         op_type="rmsnorm",

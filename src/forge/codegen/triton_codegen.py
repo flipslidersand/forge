@@ -30,6 +30,9 @@ _TEMPLATES = {
     ("softmax", "single_row"): "softmax.py.jinja",
     ("softmax", "multi_row"): "softmax_multi_row.py.jinja",
     # softmax two_pass はオンライン softmax が必要なため未対応（orchestrator がスキップ）
+    ("layernorm", "single_row"): "layernorm.py.jinja",
+    ("layernorm", "multi_row"): "layernorm_multi_row.py.jinja",
+    ("gelu", "elementwise"): "gelu.py.jinja",
 }
 
 

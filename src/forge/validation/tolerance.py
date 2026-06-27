@@ -20,6 +20,9 @@ TOLERANCE: dict[str, Tolerance] = {
     "rmsnorm": Tolerance(atol=2e-3, rtol=1e-2, equal_nan=False),
     # softmax 出力は [0,1]、fp16 分解能 ~1e-3。fp32 縮約実装を通すため 2e-3。
     "softmax": Tolerance(atol=2e-3, rtol=1e-2, equal_nan=False),
+    # layernorm は rmsnorm 同様 fp16 縮約誤差で 2e-3。gelu は exact(erf) で誤差小。
+    "layernorm": Tolerance(atol=2e-3, rtol=1e-2, equal_nan=False),
+    "gelu": Tolerance(atol=2e-3, rtol=1e-2, equal_nan=False),
 }
 
 

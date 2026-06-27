@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 from forge.ir.kernel_spec import KernelSpec
+from forge.ops import is_elementwise
 
 from .params import SearchParams
 
@@ -31,9 +32,14 @@ class SearchSpace:
     variant ごとに block_size の意味と制約が異なる:
       single_row / multi_row : block_size は N 以上（行全体を 1 タイルで処理）
       two_pass               : block_size はタイルサイズで N 未満も可
+      elementwise            : block_size は flat タイル（N 非依存。elementwise op 専用）
+
+    elementwise op（gelu 等）では reduction 用 variant は使わず、elementwise_blocks を
+    タイルサイズとして variant="elementwise" のみを列挙する。
     """
 
     block_sizes: list[int] = field(default_factory=lambda: [512, 1024, 2048, 4096, 8192])
+    elementwise_blocks: list[int] = field(default_factory=lambda: [256, 512, 1024, 2048])
     num_warps: list[int] = field(default_factory=lambda: [4, 8, 16])
     num_stages: list[int] = field(default_factory=lambda: [1, 2, 3])
     acc_dtypes: list[str] = field(default_factory=lambda: ["fp32", "fp16"])
@@ -51,6 +57,25 @@ class SearchSpace:
     def _rows_for_variant(self, variant: str) -> list[int]:
         return self.rows_per_program if variant == "multi_row" else [1]
 
+    def _enumerate_elementwise(self, stages: list[int]) -> Iterator[SearchParams]:
+        seen: set[tuple] = set()
+        for block in sorted(set(self.elementwise_blocks)):
+            for warps in self.num_warps:
+                for stage in stages:
+                    for acc in self.acc_dtypes:
+                        key = (block, warps, stage, acc)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        yield SearchParams(
+                            block_size=block,
+                            num_warps=warps,
+                            num_stages=stage,
+                            acc_dtype=acc,
+                            variant="elementwise",
+                            rows_per_program=1,
+                        )
+
     def enumerate(self, spec: KernelSpec, compute_capability: str) -> Iterator[SearchParams]:
         """spec と GPU に対して有効な SearchParams を列挙する。
 
@@ -59,6 +84,11 @@ class SearchSpace:
         n = spec.input_specs[0].shape[-1]
         cc = _cc_to_int(compute_capability)
         stages = self.num_stages if cc >= _MIN_CC_FOR_PIPELINING else [1]
+
+        # elementwise op は flat タイルのみ（行 variant を使わない）
+        if is_elementwise(spec.op_type):
+            yield from self._enumerate_elementwise(stages)
+            return
 
         seen: set[tuple] = set()
         for variant in self.variants:
