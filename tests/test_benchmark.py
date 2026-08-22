@@ -71,3 +71,22 @@ class TestIsImprovement:
         cand = make_result([10.0])
         base = make_result([0.0])
         assert is_improvement(cand, base) is False
+
+    def test_zero_baseline_emits_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+
+        cand = make_result([10.0])
+        base = make_result([0.0])
+        with caplog.at_level(logging.WARNING, logger="forge.benchmark.statistics"):
+            result = is_improvement(cand, base)
+        assert result is False
+        assert any("p20_us" in r.message and "invalid" in r.message for r in caplog.records)
+
+    def test_valid_baseline_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+
+        cand = make_result([100.0] * 10)
+        base = make_result([50.0] * 10)
+        with caplog.at_level(logging.WARNING, logger="forge.benchmark.statistics"):
+            is_improvement(cand, base)
+        assert not caplog.records

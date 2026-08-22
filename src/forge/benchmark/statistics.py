@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 import statistics
 from dataclasses import dataclass, field
 from typing import TypedDict
+
+_logger = logging.getLogger(__name__)
 
 
 class _BenchmarkResultDictRequired(TypedDict):
@@ -79,5 +82,9 @@ def is_improvement(
     は約 4 倍のマージン（ADR-004）。
     """
     if baseline.p20_us <= 0:
+        _logger.warning(
+            "is_improvement: baseline.p20_us=%s is invalid (<=0), treating as no improvement",
+            baseline.p20_us,
+        )
         return False
     return candidate.p80_us < baseline.p20_us / min_speedup
