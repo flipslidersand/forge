@@ -165,3 +165,66 @@ def test_cache_clear_eof_aborts(tmp_path, capsys, monkeypatch) -> None:
     assert rc == 0
     assert "中止" in capsys.readouterr().out
     assert KernelRepository(db).count() == 2
+
+
+class TestSQLiteErrorHandling:
+    """SQLite 破損・操作失敗時に rc=1 とユーザーフレンドリーなメッセージを返す。"""
+
+    def test_list_operational_error_returns_1(self, tmp_path, capsys, monkeypatch) -> None:
+        import sqlite3
+
+        db = tmp_path / "cache.db"
+        _seed(db, n=1)
+
+        from forge.cache import repository as repo_mod
+
+        original_cls = repo_mod.KernelRepository
+
+        class _BrokenRepo(original_cls):
+            def list_summaries(self):
+                raise sqlite3.OperationalError("database disk image is malformed")
+
+        monkeypatch.setattr(repo_mod, "KernelRepository", _BrokenRepo)
+        rc = main(["cache", "list", "--db", str(db)])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "malformed" in err
+        assert "rm" in err
+
+    def test_list_database_error_returns_1(self, tmp_path, capsys, monkeypatch) -> None:
+        import sqlite3
+
+        db = tmp_path / "cache.db"
+        _seed(db, n=1)
+
+        from forge.cache import repository as repo_mod
+
+        original_cls = repo_mod.KernelRepository
+
+        class _BrokenRepo(original_cls):
+            def list_summaries(self):
+                raise sqlite3.DatabaseError("file is not a database")
+
+        monkeypatch.setattr(repo_mod, "KernelRepository", _BrokenRepo)
+        rc = main(["cache", "list", "--db", str(db)])
+        assert rc == 1
+        assert "not a database" in capsys.readouterr().err
+
+    def test_clear_operational_error_returns_1(self, tmp_path, capsys, monkeypatch) -> None:
+        import sqlite3
+
+        db = tmp_path / "cache.db"
+        _seed(db, n=1)
+
+        from forge.cache import repository as repo_mod
+
+        original_cls = repo_mod.KernelRepository
+
+        class _BrokenRepo(original_cls):
+            def count(self):
+                raise sqlite3.OperationalError("no such table: kernels")
+
+        monkeypatch.setattr(repo_mod, "KernelRepository", _BrokenRepo)
+        rc = main(["cache", "clear", "--force", "--db", str(db)])
+        assert rc == 1
+        assert "no such table" in capsys.readouterr().err

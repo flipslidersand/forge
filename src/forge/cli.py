@@ -44,6 +44,8 @@ def _db_missing(db: str) -> bool:
 
 
 def _cmd_list(args: argparse.Namespace) -> int:
+    import sqlite3
+
     from forge.cache.repository import KernelRepository
 
     if _db_missing(args.db):
@@ -53,6 +55,13 @@ def _cmd_list(args: argparse.Namespace) -> int:
     repo = KernelRepository(args.db)
     try:
         summaries = repo.list_summaries()
+    except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+        print(
+            f"エラー: キャッシュ DB の読み取りに失敗しました: {e}\n"
+            f"対処法: rm {args.db}  (次回実行時にキャッシュが再構築されます)",
+            file=sys.stderr,
+        )
+        return 1
     finally:
         repo.close()
 
@@ -113,6 +122,8 @@ def _confirm(prompt: str) -> bool:
 
 
 def _cmd_clear(args: argparse.Namespace) -> int:
+    import sqlite3
+
     from forge.cache.repository import KernelRepository
 
     if _db_missing(args.db):
@@ -131,6 +142,13 @@ def _cmd_clear(args: argparse.Namespace) -> int:
             print("中止しました。")
             return 0
         deleted = repo.clear()
+    except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+        print(
+            f"エラー: キャッシュ DB の操作に失敗しました: {e}\n"
+            f"対処法: rm {args.db}  (次回実行時にキャッシュが再構築されます)",
+            file=sys.stderr,
+        )
+        return 1
     finally:
         repo.close()
     print(f"{deleted} 件削除しました。")
