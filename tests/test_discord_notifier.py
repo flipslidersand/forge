@@ -89,3 +89,51 @@ class TestConfiguredFailure:
         n = _configured()
         with patch("forge.notifiers.discord.urlopen", side_effect=OSError("network down")):
             assert n.send_optimization_complete("rmsnorm", 1.0, 5, 1.0) is False
+
+
+class TestUnexpectedExceptions:
+    """URLError 以外の例外でも伝播させず False を返すことを検証。
+
+    discord.py の2層構造を確認する:
+    - 外層 except Exception (:70/:112/:137): embed 構築中の予期しない例外
+    - 内層 except Exception (:170):         urlopen が URLError 以外で失敗した場合
+    """
+
+    def test_send_webhook_runtime_error_returns_false(self) -> None:
+        """_send_webhook 内で URLError 以外の例外 → False（内層 except Exception）。"""
+        n = _configured()
+        with patch(
+            "forge.notifiers.discord.urlopen", side_effect=RuntimeError("ssl context broken")
+        ):
+            assert n.send_optimization_complete("rmsnorm", 1.0, 5, 2.0) is False
+
+    def test_send_webhook_attribute_error_returns_false(self) -> None:
+        """urlopen が AttributeError を投げても False を返す。"""
+        n = _configured()
+        with patch("forge.notifiers.discord.urlopen", side_effect=AttributeError("mock attr")):
+            assert n.send_cache_hit("rmsnorm") is False
+
+    def test_send_webhook_value_error_returns_false(self) -> None:
+        """urlopen が ValueError を投げても False を返す。"""
+        n = _configured()
+        with patch("forge.notifiers.discord.urlopen", side_effect=ValueError("unexpected value")):
+            assert n.send_optimization_error("rmsnorm", "msg", "ERR") is False
+
+    def test_embed_construction_error_returns_false(self) -> None:
+        """embed 構築中（datetime.now）の例外を外層 except Exception が握る。"""
+        n = _configured()
+        with patch("forge.notifiers.discord.datetime") as mock_dt:
+            mock_dt.now.side_effect = RuntimeError("clock unavailable")
+            assert n.send_optimization_complete("rmsnorm", 1.0, 5, 2.0) is False
+
+    def test_send_optimization_error_embed_construction_error_returns_false(self) -> None:
+        n = _configured()
+        with patch("forge.notifiers.discord.datetime") as mock_dt:
+            mock_dt.now.side_effect = RuntimeError("clock unavailable")
+            assert n.send_optimization_error("rmsnorm", "fail", "TYPE") is False
+
+    def test_send_cache_hit_embed_construction_error_returns_false(self) -> None:
+        n = _configured()
+        with patch("forge.notifiers.discord.datetime") as mock_dt:
+            mock_dt.now.side_effect = RuntimeError("clock unavailable")
+            assert n.send_cache_hit("rmsnorm") is False
