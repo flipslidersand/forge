@@ -65,5 +65,5 @@ class OllamaGenerator(_BaseGenerator):
             content = resp.message.content or ""
             proposal = Proposal.model_validate_json(content)
             return [c.model_dump() for c in proposal.candidates]
-        except Exception:
+        except Exception:  # noqa: BLE001 — ollama connection/JSON parse failure → return empty candidates
             return []
